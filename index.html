@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live HTML Code Previewer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #4b5563; /* Gray-600 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; /* Gray-800 */
+        }
+
+        /* Set Inter as default font */
+        body {
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        /* Ensure the main container takes up full height relative to the header */
+        #main-content-wrapper {
+            height: calc(100vh - 4rem); 
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+
+    <!-- Header -->
+    <header class="h-16 bg-gray-800 shadow-lg flex items-center justify-between px-6">
+        <h1 class="text-xl font-bold text-indigo-400">Code Playground</h1>
+        <button id="update-button" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50">
+            Run / Update Preview
+        </button>
+    </header>
+
+    <!-- Main Content Area: Use relative positioning to allow absolute overlay for views -->
+    <div id="main-content-wrapper" class="relative">
+        
+        <!-- Editor View (Default/Full Screen) -->
+        <div id="editor-view" class="absolute inset-0 flex flex-col">
+            <label for="html-editor" class="p-2 text-sm font-medium bg-gray-700 text-gray-300">HTML Code Editor</label>
+            <textarea id="html-editor" spellcheck="false" placeholder="Paste your HTML code here (including <html> and <body> tags for a complete page)..."
+                      class="flex-grow p-4 bg-gray-800 text-gray-200 text-sm resize-none border-t border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 h-full"></textarea>
+        </div>
+
+        <!-- Preview View (Starts Hidden, becomes Full Screen) -->
+        <div id="preview-view" class="absolute inset-0 flex flex-col hidden">
+            <!-- Preview Header with Close Button -->
+            <div class="p-2 text-sm font-medium bg-gray-700 text-gray-300 flex justify-between items-center flex-shrink-0">
+                <span>Live Preview</span>
+                <button id="close-preview-button" class="text-gray-300 hover:text-white p-1 rounded-full hover:bg-gray-600 transition duration-150 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    <!-- Close icon (X) using SVG -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+            <!-- Iframe takes remaining height -->
+            <iframe id="preview-iframe" class="flex-grow w-full bg-white border-t border-gray-600"></iframe>
+        </div>
+    </div>
+
+    <script>
+        // Get references to DOM elements
+        const editor = document.getElementById('html-editor');
+        const iframe = document.getElementById('preview-iframe');
+        const updateButton = document.getElementById('update-button');
+        
+        // New elements for view switching
+        const editorView = document.getElementById('editor-view');
+        const previewView = document.getElementById('preview-view');
+        const closePreviewButton = document.getElementById('close-preview-button');
+
+        // Initial default code to show something on load
+        editor.value = `<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            padding: 20px; 
+            background-color: #f0f4f8; 
+        }
+        .card { 
+            background-color: #ffffff; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+            max-width: 400px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #4338ca;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Full-Screen Preview Mode!</h1>
+        <p>This is where your live HTML output appears. Click the 'X' button above to go back to editing.</p>
+        <button>A Sample Button</button>
+    </div>
+</body>
+</html>`;
+
+        /**
+         * Function to switch to the full-screen editor view.
+         */
+        function showEditor() {
+            editorView.classList.remove('hidden');
+            previewView.classList.add('hidden');
+            // Change button text back to the default
+            updateButton.textContent = 'Run / Update Preview';
+            console.log("Switched to Editor View.");
+        }
+
+        /**
+         * Function to render the HTML from the editor into the iframe and switch to preview view.
+         */
+        function updatePreview() {
+            // Get the content from the textarea
+            const htmlCode = editor.value;
+
+            // Write the new content to the iframe
+            // open() and close() ensure the content is fully replaced.
+            iframe.contentDocument.open();
+            iframe.contentDocument.write(htmlCode);
+            iframe.contentDocument.close();
+            
+            // Switch views: Hide editor, show preview
+            editorView.classList.add('hidden');
+            previewView.classList.remove('hidden');
+            
+            // Change button text for clarity while in preview mode 
+            // The button now acts as a 'Refresh' without changing the view
+            updateButton.textContent = 'Refresh Preview';
+
+            console.log("Preview updated and switched to Preview View.");
+        }
+
+        // --- Event Listeners ---
+
+        // 1. Update Preview on Button Click (switches to preview view)
+        updateButton.addEventListener('click', updatePreview);
+
+        // 2. Close Preview Button to go back to editor
+        closePreviewButton.addEventListener('click', showEditor);
+
+        // 3. Initial setup on load: Render default code and ensure editor view is active
+        window.onload = function() {
+            // Initial content load to the hidden iframe
+            updatePreview();
+            
+            // Immediately switch to the editor view
+            showEditor();
+            console.log("Application initialized in Editor View.");
+        };
+
+        // 4. Debounced live update on input for a modern feel (optional, but convenient)
+        let typingTimer;
+        const debounceDelay = 500; // 500ms delay
+
+        editor.addEventListener('input', () => {
+            clearTimeout(typingTimer);
+            // This still updates the iframe's content in the background
+            typingTimer = setTimeout(updatePreview, debounceDelay);
+        });
+
+    </script>
+</body>
+</html>
