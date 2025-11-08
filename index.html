@@ -7,7 +7,6 @@
 
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -38,7 +37,6 @@
 </head>
 <body class="bg-gray-900 text-gray-100">
 
-    <!-- Header -->
     <header class="h-16 bg-gray-800 shadow-lg flex items-center justify-between px-6">
         <h1 class="text-xl font-bold text-indigo-400">Code Playground</h1>
         <button id="update-button" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50">
@@ -46,29 +44,26 @@
         </button>
     </header>
 
-    <!-- Main Content Area: Use relative positioning to allow absolute overlay for views -->
     <div id="main-content-wrapper" class="relative">
         
-        <!-- Editor View (Default/Full Screen) -->
         <div id="editor-view" class="absolute inset-0 flex flex-col">
-            <label for="html-editor" class="p-2 text-sm font-medium bg-gray-700 text-gray-300">HTML Code Editor</label>
+            
+            <div id="tabs-bar" class="flex-shrink-0 flex overflow-x-auto bg-gray-800 border-b border-gray-700">
+                </div>
+            <label id="editor-label" for="html-editor" class="p-2 text-sm font-medium bg-gray-700 text-gray-300 flex-shrink-0">HTML Code Editor</label>
             <textarea id="html-editor" spellcheck="false" placeholder="Paste your HTML code here (including <html> and <body> tags for a complete page)..."
                       class="flex-grow p-4 bg-gray-800 text-gray-200 text-sm resize-none border-t border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 h-full"></textarea>
         </div>
 
-        <!-- Preview View (Starts Hidden, becomes Full Screen) -->
         <div id="preview-view" class="absolute inset-0 flex flex-col hidden">
-            <!-- Preview Header with Close Button -->
             <div class="p-2 text-sm font-medium bg-gray-700 text-gray-300 flex justify-between items-center flex-shrink-0">
                 <span>Live Preview</span>
                 <button id="close-preview-button" class="text-gray-300 hover:text-white p-1 rounded-full hover:bg-gray-600 transition duration-150 focus:outline-none focus:ring-2 focus:ring-gray-500">
-                    <!-- Close icon (X) using SVG -->
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                     </svg>
                 </button>
             </div>
-            <!-- Iframe takes remaining height -->
             <iframe id="preview-iframe" class="flex-grow w-full bg-white border-t border-gray-600"></iframe>
         </div>
     </div>
@@ -83,9 +78,16 @@
         const editorView = document.getElementById('editor-view');
         const previewView = document.getElementById('preview-view');
         const closePreviewButton = document.getElementById('close-preview-button');
+        
+        // NEW: Tabs elements
+        const tabsBar = document.getElementById('tabs-bar');
 
-        // Initial default code to show something on load
-        editor.value = `<!DOCTYPE html>
+        // --- NEW: TAB STATE AND CONSTANTS ---
+        let tabsState = [];
+        let currentTabId = null;
+        const LOCAL_STORAGE_KEY = 'codePlaygroundTabsState';
+        
+        const DEFAULT_CODE = `<!DOCTYPE html>
 <html>
 <head>
     <style>
@@ -126,6 +128,182 @@
     </div>
 </body>
 </html>`;
+        // --- END TAB STATE AND CONSTANTS ---
+
+        /** Generates a simple unique ID. */
+        function generateUniqueId() {
+            return Date.now();
+        }
+
+        // --- PERSISTENCE FUNCTIONS ---
+        function saveStateToLocalStorage() {
+            try {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ tabs: tabsState, currentTabId }));
+            } catch (e) {
+                console.error("Could not save state to local storage:", e);
+            }
+        }
+
+        function loadStateFromLocalStorage() {
+            try {
+                const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    tabsState = state.tabs || [];
+                    currentTabId = state.currentTabId;
+                    return tabsState.length > 0;
+                }
+                return false;
+            } catch (e) {
+                console.error("Could not load state from local storage:", e);
+                return false;
+            }
+        }
+        // --- END PERSISTENCE FUNCTIONS ---
+
+        // --- TAB MANAGEMENT CORE LOGIC ---
+
+        /** Saves the current editor content to the active tab in the state. */
+        function saveCurrentTabCode() {
+            if (currentTabId) {
+                const currentTab = tabsState.find(t => t.id === currentTabId);
+                if (currentTab) {
+                    currentTab.code = editor.value;
+                    saveStateToLocalStorage();
+                }
+            }
+        }
+
+        /** Renders the entire tabs bar UI based on the state. */
+        function renderTabs() {
+            tabsBar.innerHTML = ''; // Clear existing tabs
+            
+            // Render the "Add Tab" button
+            const addButton = document.createElement('button');
+            addButton.textContent = '+';
+            addButton.onclick = addTab;
+            addButton.className = 'flex-shrink-0 px-4 py-2 text-xl font-semibold text-indigo-400 hover:bg-gray-700 transition duration-150';
+            tabsBar.appendChild(addButton);
+
+            tabsState.forEach(tab => {
+                const isActive = tab.id === currentTabId;
+                
+                // Tab Container
+                const tabDiv = document.createElement('div');
+                tabDiv.className = `group flex items-center px-3 py-2 text-sm cursor-pointer ${isActive ? 'bg-gray-700 text-indigo-400 font-bold border-t-2 border-indigo-500' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`;
+                tabDiv.onclick = (e) => {
+                    // Only switch if the rename input or close button weren't the target
+                    if (!e.target.closest('.close-btn') && e.target.tagName !== 'INPUT') {
+                        switchTab(tab.id);
+                    }
+                };
+
+                // Tab Name Input (for inline renaming)
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.value = tab.name;
+                // Add a max-width to the input for better overflow handling in the tab bar
+                nameInput.className = `w-24 bg-transparent border-none focus:outline-none ${isActive ? 'text-indigo-400' : 'text-gray-400'}`;
+                nameInput.title = 'Click to rename';
+                
+                // Prevent click on input from triggering tab switch
+                nameInput.onclick = (e) => e.stopPropagation(); 
+                
+                nameInput.onchange = (e) => renameTab(tab.id, e.target.value);
+                nameInput.onblur = (e) => renameTab(tab.id, e.target.value);
+
+                tabDiv.appendChild(nameInput);
+
+                // Close Button
+                const closeButton = document.createElement('button');
+                closeButton.innerHTML = '&#x2715;'; // 'X' symbol
+                closeButton.className = 'close-btn ml-2 text-xs text-gray-500 hover:text-red-400 transition duration-150';
+                closeButton.title = 'Close tab';
+                closeButton.onclick = (e) => {
+                    e.stopPropagation(); // Stop click from propagating to tabDiv
+                    closeTab(tab.id);
+                };
+                tabDiv.appendChild(closeButton);
+
+                tabsBar.appendChild(tabDiv);
+            });
+        }
+        
+        /** Switches the active tab and loads its code into the editor. */
+        function switchTab(id) {
+            // 1. Save code of the OLD current tab
+            saveCurrentTabCode();
+
+            // 2. Set NEW current tab
+            currentTabId = id;
+            const newTab = tabsState.find(t => t.id === id);
+
+            if (newTab) {
+                // 3. Load code into the editor
+                editor.value = newTab.code;
+            }
+            
+            // 4. Re-render tabs UI
+            renderTabs();
+            
+            // 5. Update preview with the new tab's content silently
+            updatePreview(false); 
+            saveStateToLocalStorage();
+        }
+        
+        /** Adds a new tab to the state and switches to it. */
+        window.addTab = function() { // Make global for button
+            const newId = generateUniqueId();
+            const newTab = {
+                id: newId,
+                name: `Untitled ${tabsState.length + 1}`,
+                code: DEFAULT_CODE
+            };
+            
+            // 1. Save code of the current tab (if one exists)
+            saveCurrentTabCode();
+            
+            // 2. Add new tab to state
+            tabsState.push(newTab);
+            
+            // 3. Switch to the new tab
+            switchTab(newId);
+        }
+
+        /** Removes a tab from the state. */
+        function closeTab(id) {
+            if (tabsState.length === 1) {
+                alert("You must have at least one code tab open.");
+                return;
+            }
+            
+            const index = tabsState.findIndex(t => t.id === id);
+            if (index === -1) return;
+
+            tabsState.splice(index, 1);
+
+            // If we closed the active tab, switch to the nearest neighbor (or the first one)
+            if (id === currentTabId) {
+                // Get the tab at the index (which is now the next one, or the last one if we deleted the last)
+                const newActiveTab = tabsState[Math.min(index, tabsState.length - 1)]; 
+                switchTab(newActiveTab.id);
+            } else {
+                renderTabs(); 
+                saveStateToLocalStorage();
+            }
+        }
+        
+        /** Renames a tab in the state. */
+        function renameTab(id, newName) {
+            const tab = tabsState.find(t => t.id === id);
+            if (tab) {
+                tab.name = newName.trim() || `Tab ${id}`; // Prevent empty names
+                renderTabs();
+                saveStateToLocalStorage();
+            }
+        }
+        // --- END TAB MANAGEMENT CORE LOGIC ---
+
 
         /**
          * Function to switch to the full-screen editor view.
@@ -133,62 +311,95 @@
         function showEditor() {
             editorView.classList.remove('hidden');
             previewView.classList.add('hidden');
-            // Change button text back to the default
-            updateButton.textContent = 'Run / Update Preview';
+            // Ensure the button text is correct for the editor view
+            updateButton.textContent = 'Run / Update Preview'; 
+            
+            // NEW: Rerender tabs and ensure current code is loaded
+            renderTabs();
+            
             console.log("Switched to Editor View.");
         }
 
         /**
-         * Function to render the HTML from the editor into the iframe and switch to preview view.
+         * Function to render the HTML from the editor into the iframe.
+         * @param {boolean} switchToPreview - Whether to switch the UI view after rendering.
          */
-        function updatePreview() {
+        function updatePreview(switchToPreview = true) {
+            // NEW: Save the current code to state before generating the preview
+            saveCurrentTabCode(); 
+
             // Get the content from the textarea
             const htmlCode = editor.value;
 
             // Write the new content to the iframe
-            // open() and close() ensure the content is fully replaced.
             iframe.contentDocument.open();
             iframe.contentDocument.write(htmlCode);
             iframe.contentDocument.close();
             
-            // Switch views: Hide editor, show preview
-            editorView.classList.add('hidden');
-            previewView.classList.remove('hidden');
-            
-            // Change button text for clarity while in preview mode 
-            // The button now acts as a 'Refresh' without changing the view
-            updateButton.textContent = 'Refresh Preview';
+            if (switchToPreview) {
+                // Switch views: Hide editor, show preview
+                editorView.classList.add('hidden');
+                previewView.classList.remove('hidden');
+                
+                // Change button text for clarity while in preview mode 
+                updateButton.textContent = 'Refresh Preview';
 
-            console.log("Preview updated and switched to Preview View.");
+                console.log("Preview updated and switched to Preview View.");
+            } else {
+                console.log("Preview silently updated (No view switch).");
+            }
         }
 
         // --- Event Listeners ---
 
         // 1. Update Preview on Button Click (switches to preview view)
-        updateButton.addEventListener('click', updatePreview);
+        updateButton.addEventListener('click', () => updatePreview(true));
 
         // 2. Close Preview Button to go back to editor
         closePreviewButton.addEventListener('click', showEditor);
 
-        // 3. Initial setup on load: Render default code and ensure editor view is active
-        window.onload = function() {
-            // Initial content load to the hidden iframe
-            updatePreview();
-            
-            // Immediately switch to the editor view
-            showEditor();
-            console.log("Application initialized in Editor View.");
-        };
-
-        // 4. Debounced live update on input for a modern feel (optional, but convenient)
+        // 3. Debounced live update on input (saves state and updates preview silently)
         let typingTimer;
         const debounceDelay = 500; // 500ms delay
 
         editor.addEventListener('input', () => {
             clearTimeout(typingTimer);
-            // This still updates the iframe's content in the background
-            typingTimer = setTimeout(updatePreview, debounceDelay);
+            typingTimer = setTimeout(() => {
+                saveCurrentTabCode(); // Save state on input debounce
+                updatePreview(false); // Update iframe, but DO NOT switch to preview view
+            }, debounceDelay);
         });
+        
+        // --- INITIALIZATION ---
+        function initializeTabs() {
+            // 1. Load state
+            const stateLoaded = loadStateFromLocalStorage();
+            
+            if (!stateLoaded) {
+                // 2. If no state, create the default tab
+                
+                // Create the first tab using the default code
+                const newId = generateUniqueId();
+                tabsState.push({
+                    id: newId,
+                    name: `Untitled 1`,
+                    code: DEFAULT_CODE
+                });
+                currentTabId = newId;
+            } 
+            
+            // 3. Ensure the active tab's content is loaded into the editor
+            switchTab(currentTabId); 
+
+            // 4. Set the view to editor
+            showEditor();
+            
+            // 5. Initial content load to the hidden iframe
+            updatePreview(false);
+        }
+
+        // 6. Start the application
+        window.onload = initializeTabs;
 
     </script>
 </body>
